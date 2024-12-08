@@ -43,6 +43,7 @@ syntax:max "¬ " propform:40             : propform
 syntax:max "(" propform ")"             : propform
 
 macro_rules
+  -- `Lean.quote` 等を使ってただの String に変換している
   | `(prop!{$p:ident}) => `(PropForm.var $(Lean.quote p.getId.toString))
   | `(prop!{⊤})        => `(ProfForm.tr)
   | `(prop!{⊥})        => `(ProfForm.fls)
