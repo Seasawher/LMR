@@ -4,10 +4,12 @@ open Lean
 
 namespace List
 
+variable {α : Type}
+
 /-- 二つのリストの重複をなくす -/
 protected def union' [DecidableEq α] [Hashable α]
     (l₁ l₂ : List α) : List α := Id.run do
-  let mut s := Lean.HashSet.empty
+  let mut s := Std.HashSet.empty
   for x in l₁ do
     s := s.insert x
   for x in l₂ do

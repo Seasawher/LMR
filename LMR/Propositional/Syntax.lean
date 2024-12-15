@@ -1,7 +1,7 @@
 import LMR.Util.Misc
 
 /-- 論理式 -/
-inductive PropForm
+inductive PropForm where
   /-- 真 `⊤` -/
   | tr     : PropForm
   /-- 偽 `⊥` -/
@@ -121,6 +121,132 @@ def vars : PropForm → List String
 #eval depth propExample
 #eval vars propExample
 
-
-
 end PropForm
+
+
+/- ## リテラル -/
+
+/-- リテラル -/
+inductive Lit where
+  | tr  : Lit
+  | fls : Lit
+  | pos : String → Lit
+  | neg : String → Lit
+  deriving Repr, DecidableEq, Inhabited
+
+namespace Lit
+
+declare_syntax_cat varlit
+
+syntax ident : varlit
+syntax "-" ident : varlit
+
+declare_syntax_cat proplit
+
+syntax "lit!{" proplit "}" : term
+syntax "⊤" : proplit
+syntax "⊥" : proplit
+syntax varlit : proplit
+
+macro_rules
+  | `(lit!{ ⊤ })           => `(tr)
+  | `(lit!{ ⊥ })           => `(fls)
+  | `(lit!{ - $x:ident })  => `(neg $(Lean.quote x.getId.toString))
+  | `(lit!{ $x:ident })    => `(pos $(Lean.quote x.getId.toString))
+
+end Lit
+
+/--
+### 否定標準形 (NNF)
+
+否定標準形は、否定が内側に入る形の論理式。
+たとえば `P := ¬ (A ∧ B)` は NNF ではない。
+`¬ A ∨ ¬ B` は、`P` の NNF である。
+-/
+inductive NnfForm where
+  | lit  (l : Lit)       : NnfForm
+  | conj (p q : NnfForm) : NnfForm
+  | disj (p q : NnfForm) : NnfForm
+  deriving Repr, DecidableEq, Inhabited
+
+namespace NnfForm
+
+declare_syntax_cat nnfform
+
+syntax "nnf!{" nnfform "}"  : term
+
+syntax:max ident                        : nnfform
+syntax "⊤"                              : nnfform
+syntax "⊥"                              : nnfform
+syntax:35 nnfform:36 " ∧ " nnfform:35   : nnfform
+syntax:30 nnfform:31 " ∨ " nnfform:30   : nnfform
+syntax:max "(" nnfform ")"              : nnfform
+syntax:max "¬ " ident                   : nnfform
+
+macro_rules
+  | `(nnf!{$p:ident})   => `(NnfForm.lit (Lit.pos $(Lean.quote p.getId.toString)))
+  | `(nnf!{¬ $p:ident}) => `(NnfForm.lit (Lit.neg $(Lean.quote p.getId.toString)))
+  | `(nnf!{⊤})          => `(NnfForm.tr)
+  | `(nnf!{⊥})          => `(NnfForm.fls)
+  | `(nnf!{$p ∧ $q})    => `(NnfForm.conj nnf!{$p} nnf!{$q})
+  | `(nnf!{$p ∨ $q})    => `(NnfForm.disj nnf!{$p} nnf!{$q})
+  | `(nnf!{($p:nnfform)}) => `(nnf!{$p})
+
+private def toString : NnfForm → String
+  | lit (Lit.pos s)  => s
+  | lit (Lit.neg s)  => "(¬ " ++ s ++ ")"
+  | lit Lit.tr       => "⊤"
+  | lit Lit.fls      => "⊥"
+  | conj p q         => "(" ++ toString p ++ " ∧ " ++ toString q ++ ")"
+  | disj p q         => "(" ++ toString p ++ " ∨ " ++ toString q ++ ")"
+
+instance : ToString NnfForm := ⟨toString⟩
+
+instance : Repr NnfForm where
+  reprPrec f _ := s!"nnf!\{{toString f}}"
+
+end NnfForm
+
+/- ## 真理値割当 -/
+
+/-- partial な真理値割り当て -/
+def PropAssignment := List (String × Bool)
+
+instance : Inhabited PropAssignment :=
+  inferInstanceAs (Inhabited (List _))
+
+/-- 真理値割り当てをリストから定義する -/
+def PropAssignment.mk (vars : List (String × Bool)) : PropAssignment :=
+  vars
+
+syntax "propassign!{" varlit,* "}" : term
+macro_rules
+  | `( propassign!{ $[$vars:varlit],* }) => do
+    let vals ← vars.mapM fun
+      | `(varlit| $x:ident) => `(($(Lean.quote x.getId.toString), true))
+      | `(varlit| -$x:ident) => `(($(Lean.quote x.getId.toString), false))
+      | s => panic! s!"unexpected syntax '{s}'"
+    `(PropAssignment.mk [$[$vals],*])
+
+instance : Repr PropAssignment where
+  reprPrec τ _ :=
+    let vars := ", ".intercalate (τ.map fun (x, v) => if v then x else "-" ++ x)
+    s!"propassign!\{{vars}}"
+
+instance : ToString PropAssignment where
+  toString τ :=
+    let mapping := ", ".intercalate <|
+      List.map (fun (x, v) => x ++ " ↦ " ++ if v then "⊤" else "⊥") τ
+    s!"\{{mapping}}"
+
+/-- 変数 `x : String` に対して、真理値割当 `τ : PropAssignment` における真理値を返す。未割り当ての場合は `none` を返す。 -/
+def PropAssignment.eval? (τ : PropAssignment) (x : String) : Option Bool := Id.run do
+  let τ : List _ := τ
+  for (y, v) in τ do
+    if y == x then return some v
+  return none
+
+/-- 変数 `x : String` に対して、真理値割当 `τ : PropAssignment` における真理値を返す。
+未割当の場合は `false` を返す。-/
+def PropAssignment.eval (τ : PropAssignment) (x : String) : Bool :=
+  τ.eval? x |>.getD false

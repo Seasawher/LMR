@@ -3,6 +3,10 @@ open Lake DSL
 
 package "LMR" where
   -- add package configuration options here
+  leanOptions := #[
+    ⟨`autoImplicit, false⟩,
+    ⟨`relaxedAutoImplicit, false⟩
+  ]
 
 @[default_target]
 lean_lib «LMR» where
