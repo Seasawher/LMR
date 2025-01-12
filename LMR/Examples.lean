@@ -1,5 +1,7 @@
 import LMR.Propositional.Syntax
 
+open PropForm
+
 /-- 論理式に対して、真理値割当 `v` による評価を返す。-/
 def PropForm.eval (v : PropAssignment) : PropForm → Bool
   | var s => v.eval s
@@ -62,12 +64,12 @@ def PropForm.isSat (A : PropForm) : Bool := List.any (truthTable A) Prod.snd
 #guard prop!{p → q}.isSat
 #guard ! prop!{p ∧ ¬ p}.isSat
 
-/-- リテラルの否定 -/
-def Lit.negate : Lit → Lit
-  | tr   => fls
-  | fls  => tr
-  | pos s => neg s
-  | neg s => pos s
+-- /-- リテラルの否定 -/
+-- def Lit.negate : Lit → Lit
+--   | tr   => fls
+--   | fls  => tr
+--   | pos s => neg s
+--   | neg s => pos s
 
 /-- 否定標準形の否定（の否定標準形）を求める -/
 def NnfForm.neg : NnfForm → NnfForm
@@ -76,6 +78,8 @@ def NnfForm.neg : NnfForm → NnfForm
   | disj p q => conj (neg p) (neg q)
 
 namespace PropForm
+
+
 
 open NnfForm in
 
@@ -94,4 +98,72 @@ def toNnfForm : PropForm → NnfForm
 
 #eval ToString.toString <| prop!{¬ (p ∧ ¬ (q ∨ r))}.toNnfForm
 
+-- /-- クローズ（句） -/
+-- def Clause := List Lit
+
+-- /-- conjunction normal form(連言標準形) -/
+-- def CnfForm := List Clause
+
+private def exLit0 := lit!{ p }
+private def exLit1 := lit!{ -q }
+
+#print exLit0
+#print exLit1
+
+private def exClause0 := clause!{ p }
+private def exClause1 := clause!{ p -q r }
+private def exClause2 := clause!{ r -s }
+
+#eval exClause0
+#eval ToString.toString exClause1
+#print exClause2
+
+private def exCnf0 := cnf!{
+  p,
+  -p q -r,
+  -p q
+}
+
+private def exCnf1 := cnf!{
+  p -q,
+  p q,
+  -p -r,
+  -p r
+}
+
+private def exCnf2 := cnf!{
+  p q,
+  -p,
+  -q
+}
+
+#print exCnf0
+#print exCnf1
+#print exCnf2
+
+#eval exCnf2
+#eval toString exCnf2
+
 end PropForm
+
+
+#eval List.insert lit!{ r } exClause0
+
+#eval exClause0.union' exClause1
+
+#eval List.Union [exClause0, exClause1, exClause2]
+
+#eval exCnf1.map exClause0.union'
+
+def CnfForm.disj (cnf1 cnf2 : CnfForm) : CnfForm :=
+  -- 分配法則使ってる（map して union してるのがそれ）
+  (cnf1.map (fun cls => cnf2.map cls.union')).Union
+
+#eval toString <| cnf!{ q, p }
+#eval toString <| CnfForm.disj cnf!{ p } cnf!{ q, p }
+-- `p ∨ (q ∧ p) = (p ∨ q) ∧ (p ∨ p)`
+--           `_ = (p ∨ q) ∧ p`
+
+#eval cnf!{p, q, u -v}.disj cnf!{r1 r2, s1 s2, t1 t2 t3}
+#eval toString <| cnf!{p, q, u -v}.disj cnf!{r1 r2, s1 s2, t1 t2 t3}
+

@@ -20,10 +20,12 @@ inductive PropForm where
   | biImpl : PropForm → PropForm → PropForm
   deriving Repr, DecidableEq, Inhabited
 
-open PropForm
+section
+  open PropForm
 
--- コンストラクタを使って手動で頑張って論理式を定義している例
-#check (impl (conj (var "p") (var "q")) (var "r"))
+  -- コンストラクタを使って手動で頑張って論理式を定義している例
+  #check (impl (conj (var "p") (var "q")) (var "r"))
+end
 
 namespace PropForm
 
@@ -154,6 +156,30 @@ macro_rules
   | `(lit!{ - $x:ident })  => `(neg $(Lean.quote x.getId.toString))
   | `(lit!{ $x:ident })    => `(pos $(Lean.quote x.getId.toString))
 
+instance : ToString Lit :=
+  ⟨fun
+    | tr    => "⊤"
+    | fls   => "⊥"
+    | pos s => s
+    | neg s => "-" ++ s ⟩
+
+instance : Repr Lit where
+  reprPrec l _ := s!"lit!\{{toString l}}"
+
+def negate : Lit → Lit
+  | tr   => fls
+  | fls  => tr
+  | pos s => neg s
+  | neg s => pos s
+
+instance : Neg Lit :=
+  ⟨negate⟩
+
+instance : Hashable Lit where
+  hash l := hash (toString l)
+
+deriving instance DecidableEq for Lit
+
 end Lit
 
 /--
@@ -206,6 +232,78 @@ instance : Repr NnfForm where
   reprPrec f _ := s!"nnf!\{{toString f}}"
 
 end NnfForm
+
+/- ## Clause -/
+
+/-- クローズ -/
+def Clause := List Lit deriving DecidableEq, Repr, Inhabited
+
+namespace Clause
+
+/-- `List Lit` から `Clause` を作る型キャスト -/
+def mk (ls : List Lit) : Clause := ls
+
+declare_syntax_cat clause
+
+/-- Clause の項を作るための構文 -/
+syntax "clause!{" clause "}" : term
+
+syntax proplit* : clause
+
+macro_rules
+  | `(clause!{ $[$args]* }) => do
+    let args ← args.mapM fun x => `(lit!{ $x })
+    `(Clause.mk [ $args,* ])
+
+instance : Repr Clause :=
+  ⟨fun c _ => "clause!{" ++ String.intercalate " " (List.map ToString.toString c) ++ "}"⟩
+
+instance : ToString Clause :=
+  ⟨fun
+    | [] => "⊥"
+    | c  => "(" ++ " ∨ ".intercalate (List.map toString c) ++ ")"⟩
+
+instance : Hashable Clause :=
+  inferInstanceAs (Hashable (List Lit))
+
+deriving instance Membership for Clause
+
+end Clause
+
+/- ## CNF -/
+
+def CnfForm := List Clause deriving DecidableEq, Repr, Inhabited
+
+namespace CnfForm
+
+def mk (cs : List Clause) : CnfForm := cs
+
+declare_syntax_cat cnf
+
+syntax clause,* : cnf
+
+syntax "cnf!{" cnf "}" : term
+syntax clause,+ : cnf
+
+macro_rules
+  | `(cnf!{ $[$args],* }) => do
+    let args ← args.mapM fun x => `(clause!{ $x })
+    `(CnfForm.mk [ $args,* ])
+
+instance : Repr CnfForm :=
+  ⟨fun cnf _ => "cnf!{" ++ String.intercalate ", " (List.map (toString ∘ repr) cnf) ++ "}"⟩
+
+instance : ToString CnfForm :=
+  ⟨fun
+  | [] => "⊤"
+  | cs => " ∧ ".intercalate (cs.map toString)⟩
+
+deriving instance Append for CnfForm
+
+instance {m : Type → Type} : ForIn m CnfForm (List Lit) :=
+  inferInstanceAs (ForIn m (List (List Lit)) (List Lit))
+
+end CnfForm
 
 /- ## 真理値割当 -/
 
